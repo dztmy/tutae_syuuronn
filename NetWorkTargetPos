@@ -1,0 +1,300 @@
+
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using Mirror;
+
+public class NetWorkTargetPos : NetworkBehaviour
+
+{
+    // Start is called before the first frame update
+
+    [SerializeField]
+    public bool isHost = true;
+    //public bool isCollabo = true;
+
+    private int[] randList_Host = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+    private int[] randList_Client = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+
+    public enum KeyCodeInput
+    {
+        Space,
+
+        Return,
+
+        Move,
+
+        TouchOn,
+
+        TouchOff,
+    }
+
+    private Dictionary<KeyCodeInput, bool> _keyCodeInputs = new Dictionary<KeyCodeInput, bool>();
+
+
+    public int[] HostRandomList { get; private set; }
+    private int[] _currentRandomList_Host;
+
+    public int[] ClientRandomList { get; private set; }
+    private int[] _currentRandomList_Client;
+
+    public bool HostIsStartTask { get; private set; }
+    private bool _currentIsStartTask_Host;
+
+    public bool ClientIsStartTask { get; private set; }
+    private bool _currentIsStartTask_Client;
+
+    public bool IsMoveScene { get; private set; }
+    private bool _currentMoveScene;
+
+    public bool HostIsTouchedTarget { get; private set; }
+    private bool _currentTouchedTarget_Host;
+
+    public bool ClientIsTouchedTarget { get; private set; }
+    private bool _currentTouchedTarget_Client;
+
+    private PlayCommands_NAKAMURA _playCommands;
+
+    void Start()
+    {
+        HostRandomList = randList_Host;
+        ClientRandomList = randList_Host;
+        HostIsStartTask = false;
+        ClientIsStartTask = false;
+        IsMoveScene = false;
+        HostIsTouchedTarget = false;
+        ClientIsTouchedTarget = false;
+
+        _keyCodeInputs.Add(KeyCodeInput.Space, false);
+        _keyCodeInputs.Add(KeyCodeInput.Return, false);
+        _keyCodeInputs.Add(KeyCodeInput.Move, false);
+        _keyCodeInputs.Add(KeyCodeInput.TouchOn, false);
+        _keyCodeInputs.Add(KeyCodeInput.TouchOff, false);
+    }
+
+    // Update is called once per frame
+    void Update()
+    {
+        _currentRandomList_Host = HostRandomList;
+        _currentIsStartTask_Host = HostIsStartTask;
+        _currentRandomList_Client = ClientRandomList;
+        _currentIsStartTask_Client = ClientIsStartTask;
+        _currentMoveScene = IsMoveScene;
+        _currentTouchedTarget_Host = HostIsTouchedTarget;
+        _currentTouchedTarget_Client = ClientIsTouchedTarget;
+
+
+        if (_keyCodeInputs[KeyCodeInput.Space])
+        {
+            if (isHost)
+            {
+                /*==============RANDOM_Host=================*/
+                RandArray(randList_Host);
+                _currentRandomList_Host = randList_Host;
+                string randlist_Host = "";
+                foreach (int num in _currentRandomList_Host)
+                {
+                    randlist_Host += num.ToString();
+                }
+                Debug.Log("HOST LIST become RANDOM");
+                Debug.Log($"randList_Host: [{randlist_Host}]");
+
+                /*===============================*/
+
+                _playCommands.CmdHostChangeRandList(_currentRandomList_Host);
+            }
+            else
+            {
+                /*==============RANDOM_Host=================*/
+                RandArray(randList_Client);
+                _currentRandomList_Client = randList_Client;
+                string randlist_Client = "";
+                foreach (int num in _currentRandomList_Client)
+                {
+                    randlist_Client += num.ToString();
+                }
+                Debug.Log("CLIENT LIST become RANDOM");
+                Debug.Log($"randList_Client: [{randlist_Client}]");
+                /*===============================*/
+
+                _playCommands.CmdClientChangeRandList(_currentRandomList_Client);
+            }
+
+            SetKeyCodeInput(KeyCodeInput.Space, false);
+        }
+
+        if (_keyCodeInputs[KeyCodeInput.Return])
+        {
+
+            if (isHost)
+            {
+                //bool値を入れ替えてる
+
+                if (_currentIsStartTask_Host)
+                {
+                    _currentIsStartTask_Host = false;
+                    Debug.Log("HOST STOP TASK");
+                }
+                else
+                {
+                    _currentIsStartTask_Host = true;
+                    Debug.Log("HOST START TASK");
+                }
+                //------
+
+                _playCommands.CmdHostChangeIsStartTask(_currentIsStartTask_Host);
+            }
+            else
+            {
+                //bool値を入れ替えてる
+                if (_currentIsStartTask_Client)
+                {
+                    _currentIsStartTask_Client = false;
+                    Debug.Log("CLIENT STOP TASK");
+                }
+                else
+                {
+                    _currentIsStartTask_Client = true;
+                    Debug.Log("CLIENT START TASK");
+                }
+                //------
+
+                _playCommands.CmdClientChangeIsStartTask(_currentIsStartTask_Client);
+            }
+        }
+
+
+        if (_keyCodeInputs[KeyCodeInput.Move])
+        {
+            if (isHost)
+            {
+                //bool値を入れ替えてる
+                if (_currentMoveScene)
+                {
+                    _currentMoveScene = false;
+                    Debug.Log("HOST NO MOVE");
+                }
+                else
+                {
+                    _currentMoveScene = true;
+                    Debug.Log("HOST MOVE SCENE");
+                }
+                //------
+
+                _playCommands.CmdHostChangeMoveScene(_currentMoveScene);
+            }
+            else
+            {
+                //bool値を入れ替えてる
+                if (_currentMoveScene)
+                {
+                    _currentMoveScene = false;
+                    Debug.Log("CLIENT NO MOVE");
+                }
+                else
+                {
+                    _currentMoveScene = true;
+                    Debug.Log("CLIENT MOVE SCENE");
+                }
+                //------
+
+                _playCommands.CmdClientChangeMoveScene(_currentMoveScene);
+            }
+        }
+
+        if (_keyCodeInputs[KeyCodeInput.TouchOn])
+        {
+            if (isHost)
+            {
+                _currentTouchedTarget_Host = true;
+                _playCommands.CmdHostTouchedTarget(_currentTouchedTarget_Host);
+            }
+            else
+            {
+                _currentTouchedTarget_Client = true;
+                _playCommands.CmdClientTouchedTarget(_currentTouchedTarget_Client);
+            }
+
+        }
+
+        if (_keyCodeInputs[KeyCodeInput.TouchOff])
+        {
+            if (isHost)
+            {
+                _currentTouchedTarget_Host = false;
+                _playCommands.CmdHostTouchedTarget(_currentTouchedTarget_Host);
+            }
+            else
+            {
+                _currentTouchedTarget_Client = false;
+                _playCommands.CmdClientTouchedTarget(_currentTouchedTarget_Client);
+            }
+
+        }
+
+    }
+
+    private void RandArray(int[] num)
+    {
+        for (int i = 0; i < num.Length; i++)
+        {
+            int temp = num[i];
+            int randi = Random.Range(0, num.Length);
+            num[i] = num[randi];
+            num[randi] = temp;
+        }
+    }
+
+
+    public void SetKeyCodeInput(KeyCodeInput keyCodeInput, bool isPressed)
+    {
+        _keyCodeInputs[keyCodeInput] = isPressed;
+    }
+
+    public void ChangeRandList(int[] val)
+    {
+        if (isHost)
+        {
+            HostRandomList = val;
+        }
+        else
+        {
+            ClientRandomList = val;
+        }
+    }
+
+    public void ChangeIsStartTask(bool isStarting)
+    {
+        if (isHost)
+        {
+            HostIsStartTask = isStarting;
+        }
+        else
+        {
+            ClientIsStartTask = isStarting;
+        }
+    }
+
+    public void ChangeMoveScene(bool isMove)
+    {
+        IsMoveScene = isMove;
+    }
+
+    public void TouchedTarget(bool isTouched)
+    {
+        if (isHost)
+        {
+            HostIsTouchedTarget = isTouched;
+        }
+        else
+        {
+            ClientIsTouchedTarget = isTouched;
+        }
+
+    }
+
+    public void SetPlayerCommands(PlayCommands_NAKAMURA playCommands)
+    {
+        _playCommands = playCommands;
+    }
+}
