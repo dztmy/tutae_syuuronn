@@ -1,0 +1,382 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
+
+public class RealTimeManager : MonoBehaviour
+{
+    private const float RECORDING_INTERVAL = 0.0f;
+    private float _elapsedTime0;
+    private float _elapsedTime;
+    private float _elapsedTime2;
+
+    private float reachingTaskTime = 0.0f;
+    private const float REACHINGTASK_TIMER = 60.0f;
+
+
+    [SerializeField]
+    private List<GameObject> targets;
+
+    [SerializeField]
+    private ReachingTask_write _reachingRecorder;
+
+    [SerializeField]
+    private NetWorkTargetPos _networkTargetPos;
+
+    private bool isTarget;
+
+    private const float INTERVAL = 3.0f;
+    private int count = -1;
+    private int[] randList = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+
+
+    private bool isStart = false;
+
+    [SerializeField]
+    private Text modeText;
+
+    [SerializeField]
+    private FadeManager _fadeManager;
+
+    [SerializeField]
+    private Transform _imageBack;
+
+    private bool isMoved = false;
+    private bool isTouched = false;
+
+
+    // Start is called before the first frame update
+    void Start()
+    {
+        //Host
+        foreach (GameObject obj in targets)
+        {
+            obj.GetComponent<MeshRenderer>().enabled = false;
+        }
+        //_imageBack.position = new Vector3(0f, 1.1f, 1f);
+    }
+
+    private Vector3 cachedPos;
+    private Quaternion cachedRot;
+    private Vector3 cachedDummyPos;
+    private Quaternion cachedDummyRot;
+    private Vector3 cachedPos_R, cachedDummyPos_R;
+    private Quaternion cachedRot_R, cachedDummyRot_R;
+    private Vector3 cachedPos_L, cachedDummyPos_L;
+    private Quaternion cachedRot_L, cachedDummyRot_L;
+    private Vector3 cachedPos_Head, cachedDummyPos_Head;
+    private Quaternion cachedRot_Head, cachedDummyRot_Head;
+
+    void LateUpdate()
+    {
+        // HMD / Controller の Transform を全箇所取得してキャッシュ
+        // ★★★ このメソッドを全体的に修正 ★★★
+        if (_reachingRecorder != null)
+        {
+            // 右手
+            if (_reachingRecorder.recordTarget_Right_Controller != null)
+            {
+                cachedPos_R = _reachingRecorder.recordTarget_Right_Controller.position;
+                cachedRot_R = _reachingRecorder.recordTarget_Right_Controller.rotation;
+            }
+            if (_reachingRecorder.recordTarget_Right_AvatarBone != null)
+            {
+                cachedDummyPos_R = _reachingRecorder.recordTarget_Right_AvatarBone.position;
+                cachedDummyRot_R = _reachingRecorder.recordTarget_Right_AvatarBone.rotation;
+            }
+
+            // 左手
+            if (_reachingRecorder.recordTarget_Left_Controller != null)
+            {
+                cachedPos_L = _reachingRecorder.recordTarget_Left_Controller.position;
+                cachedRot_L = _reachingRecorder.recordTarget_Left_Controller.rotation;
+            }
+            if (_reachingRecorder.recordTarget_Left_AvatarBone != null)
+            {
+                cachedDummyPos_L = _reachingRecorder.recordTarget_Left_AvatarBone.position;
+                cachedDummyRot_L = _reachingRecorder.recordTarget_Left_AvatarBone.rotation;
+            }
+
+            // 頭
+            if (_reachingRecorder.recordTarget_Head_Controller != null)
+            {
+                cachedPos_Head = _reachingRecorder.recordTarget_Head_Controller.position;
+                cachedRot_Head = _reachingRecorder.recordTarget_Head_Controller.rotation;
+            }
+            if (_reachingRecorder.recordTarget_Head_AvatarBone != null)
+            {
+                cachedDummyPos_Head = _reachingRecorder.recordTarget_Head_AvatarBone.position;
+                cachedDummyRot_Head = _reachingRecorder.recordTarget_Head_AvatarBone.rotation;
+            }
+        }
+    }
+
+
+    // Update is called once per frame
+    void FixedUpdate()
+    {
+        isStart = GetIsStartTask();
+
+        if (isStart)
+        {
+            modeText.text = "Mode: START";
+
+            //記録開始
+            if (_reachingRecorder != null) _reachingRecorder.StartRecording();
+            reachingTaskTime += Time.deltaTime;
+
+        }
+        else
+        {
+            modeText.text = "Mode: IDLE";
+
+
+            // 記録を停止
+            if (_reachingRecorder != null) _reachingRecorder.StopRecording();
+
+
+            if (GetMoveScene())
+            {
+                if (!isMoved)
+                {
+                    _fadeManager.FadeOut(3);
+                    isMoved = true;
+                }
+            }
+        }
+        if (_networkTargetPos.gameObject.activeSelf)
+        {
+            _networkTargetPos.SetKeyCodeInput(NetWorkTargetPos.KeyCodeInput.TouchOn, false);
+            _networkTargetPos.SetKeyCodeInput(NetWorkTargetPos.KeyCodeInput.TouchOff, false);
+        }
+
+
+
+
+        if (isStart)
+        {
+            if (!isTarget)
+            {
+
+                //GetRandList();
+
+                if (count == -1)
+                {
+                    _elapsedTime0 += Time.deltaTime;
+                    if (_elapsedTime0 > 1.0f)
+                    {
+                        GetRandList();
+
+                        count++;
+                        count %= 10;
+                        targets[randList[count]].GetComponent<MeshRenderer>().enabled = true;
+                        isTarget = true;
+                        Debug.Log(count + "つ目");
+
+
+                        _reachingRecorder.OnsetOccurred(); // これを追加
+
+                        _reachingRecorder.FirstRecord();
+                        _reachingRecorder.RecordSpace();
+                        Transform temp = targets[randList[count]].gameObject.transform;
+                        _reachingRecorder.RecordTgt(temp.position.x, temp.position.y, temp.position.z);
+
+                        _elapsedTime0 = 0f;
+
+                        //_imageBack.position = new Vector3(0f, 1.1f, 1f);
+                    }
+                }
+                else if (count >= 0)
+                {
+                    _elapsedTime += Time.deltaTime;
+                    if (_elapsedTime > INTERVAL)
+                    {
+
+
+                        if (reachingTaskTime > REACHINGTASK_TIMER)
+                        {
+                            _fadeManager.FadeOut(3);
+                            reachingTaskTime = 0.0f;
+                            Debug.Log("1分経過しました。");
+                            count = -2;
+                        }
+
+                        count++;
+                        count %= 10;
+                        targets[randList[count]].GetComponent<MeshRenderer>().enabled = true;
+                        isTarget = true;
+                        Debug.Log(count + "つ目");
+
+                        // ★★★ 修正箇所（2回目）: 2回目以降のターゲット出現時
+                        _reachingRecorder.OnsetOccurred(); // これを追加
+                                                           // ★★★
+                        _reachingRecorder.RecordSpace();
+                        Transform temp = targets[randList[count]].gameObject.transform;
+                        _reachingRecorder.RecordTgt(temp.position.x, temp.position.y, temp.position.z);
+
+                        _elapsedTime = 0f;
+
+                        if (count == 9)
+                        {
+                            GetRandList();
+                        }
+
+
+
+                        //_imageBack.position = new Vector3(0f, 1.1f, 1f);
+
+                    }
+                    else if (_elapsedTime < 0.5f)
+                    {
+                        //ターゲット触った後0.5秒間記録するため
+                        //右手の動き記録する
+                        _elapsedTime2 += Time.fixedDeltaTime;
+                        if (_elapsedTime2 >= RECORDING_INTERVAL)
+                        {
+                            //Debug.Log("Recording... : 0.5 second");
+
+                            _reachingRecorder.Record(_elapsedTime2);
+
+                            /*_reachingRecorder.RecordFixed(
+                                Time.fixedDeltaTime,
+                                cachedPos_R, cachedRot_R, cachedDummyPos_R, cachedDummyRot_R,
+                                cachedPos_L, cachedRot_L, cachedDummyPos_L, cachedDummyRot_L,
+                                cachedPos_Head, cachedRot_Head, cachedDummyPos_Head, cachedDummyRot_Head
+                                );*/
+
+                            _elapsedTime2 = 0f;
+                            //_elapsedTime2 -= RECORDING_INTERVAL;
+                        }
+                    }
+                    else
+                    {
+                        _networkTargetPos.SetKeyCodeInput(NetWorkTargetPos.KeyCodeInput.TouchOff, true);
+                        //_imageBack.position = new Vector3(0f, 1.1f, 0.7f);
+                    }
+
+                }
+            }
+            else
+            {
+
+                if (GetTouchedTarget())
+                {
+                    _networkTargetPos.SetKeyCodeInput(NetWorkTargetPos.KeyCodeInput.TouchOff, true);
+
+                    targets[randList[count]].GetComponent<MeshRenderer>().enabled = false;
+
+                    isTarget = false;
+                    Debug.Log("ALL Touched!!");
+                    _reachingRecorder.isTouched();
+                }
+
+
+                //右手の動き記録する
+
+                _elapsedTime2 += Time.fixedDeltaTime;
+                if (_elapsedTime2 >= RECORDING_INTERVAL)
+                {
+
+                    //Debug.Log("Recording... :"+_elapsedTime2);
+
+                   // _reachingRecorder.Record(_elapsedTime2);
+
+                    /*_reachingRecorder.RecordFixed(
+                                Time.fixedDeltaTime,
+                                cachedPos_R, cachedRot_R, cachedDummyPos_R, cachedDummyRot_R,
+                                cachedPos_L, cachedRot_L, cachedDummyPos_L, cachedDummyRot_L,
+                                cachedPos_Head, cachedRot_Head, cachedDummyPos_Head, cachedDummyRot_Head
+                                );*/
+
+                    _elapsedTime2 = 0f;
+                    //_elapsedTime2 -= RECORDING_INTERVAL;
+
+                }
+
+            }
+        }
+    }
+
+
+
+    private void GetRandList()
+    {
+        if (_networkTargetPos.isHost)
+        {
+            int[] getRandList = _networkTargetPos.HostRandomList;
+            randList = getRandList;
+        }
+        else
+        {
+            int[] getRandList = _networkTargetPos.ClientRandomList;
+            randList = getRandList;
+        }
+
+    }
+
+    private bool GetIsStartTask()
+    {
+        if (_networkTargetPos.isHost)
+        {
+            return _networkTargetPos.HostIsStartTask;
+        }
+        else
+        {
+            return _networkTargetPos.ClientIsStartTask;
+        }
+
+    }
+
+    private bool GetMoveScene()
+    {
+        return _networkTargetPos.IsMoveScene;
+    }
+
+    private bool GetTouchedTarget()
+    {
+        if (_networkTargetPos.isHost)
+        {
+            return _networkTargetPos.HostIsTouchedTarget;
+        }
+        else
+        {
+            return _networkTargetPos.ClientIsTouchedTarget;
+        }
+
+    }
+
+    private void RandArray(int[] num)
+    {
+        for (int i = 0; i < num.Length; i++)
+        {
+            int temp = num[i];
+            int randi = Random.Range(0, num.Length);
+            num[i] = num[randi];
+            num[randi] = temp;
+        }
+    }
+
+    private void SetArray(int[] num, int[] num2)
+    {
+        for (int i = 0; i < num.Length; i++)
+        {
+            num[i] = num2[i];
+        }
+    }
+
+
+    public void TouchTarget()
+    {
+        if (isStart)
+        {
+            isTarget = false;
+            Debug.Log("触ったぞ！");
+
+            _networkTargetPos.SetKeyCodeInput(NetWorkTargetPos.KeyCodeInput.TouchOn, true);
+
+            _reachingRecorder.isTouched();
+        }
+    }
+
+    //all human already touch?
+}
