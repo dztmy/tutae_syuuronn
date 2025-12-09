@@ -1,0 +1,155 @@
+using UnityEngine;
+using System.IO;
+
+public class ReachingTask_write : MonoBehaviour
+{
+    [Header("連続記録設定")]
+    [Tooltip("記録データを保存するフォルダパス")]
+    public string continuousFilePath = "Assets/NAKAMURA/DataFile/RecordFile/Continuous/";
+    [Tooltip("記録用のファイル名")]
+    public string continuousFileName = "continuous_log";
+
+    [Header("記録ターゲット設定")]
+    [Tooltip("右手のVRコントローラーのアンカー")]
+    public Transform recordTarget_Right_Controller;
+    [Tooltip("IK適用後のアバターの右手首")]
+    public Transform recordTarget_Right_AvatarBone;
+    [Tooltip("左手のVRコントローラーのアンカー")]
+    public Transform recordTarget_Left_Controller;
+    [Tooltip("IK適用後のアバターの左手首")]
+    public Transform recordTarget_Left_AvatarBone;
+    [Tooltip("頭（HMD）のアンカー")]
+    public Transform recordTarget_Head_Controller;
+    [Tooltip("IK適用後のアバターの頭")]
+    public Transform recordTarget_Head_AvatarBone;
+
+    // --- 内部変数 ---
+    private CSVWriter_NAKAMURA _continuousCsvWriter;
+    private bool _isRecording = false; // 記録中かどうかを管理するフラグ
+    private float _elapsedTime = 0f;
+
+    // --- 外部から状態を設定される変数 ---
+    private int isTouch = 0;
+    private int onset = 0;
+    private float tgtPosX = 0f;
+    private float tgtPosY = 0f;
+    private float tgtPosZ = 0f;
+
+    void Update()
+    {
+        // _isRecordingフラグがtrueの間だけ、毎フレーム記録処理を実行
+        if (_isRecording)
+        {
+            RecordFrameData();
+        }
+    }
+
+    /// <summary>
+    /// 【外部から呼び出す】記録を開始するメソッド
+    /// </summary>
+    public void StartRecording()
+    {
+        if (_isRecording) return; // すでに記録中の場合は何もしない
+
+        _isRecording = true;
+        _elapsedTime = 0f;
+        InitializeCsvWriter();
+        Debug.Log("連続記録を開始しました。");
+    }
+
+    /// <summary>
+    /// 【外部から呼び出す】記録を停止するメソッド
+    /// </summary>
+    public void StopRecording()
+    {
+        if (!_isRecording) return; // 記録中でなければ何もしない
+
+        _isRecording = false;
+        Debug.Log("連続記録を停止しました。");
+    }
+
+    /// <summary>
+    /// 記録用のCSVWriterを初期化し、ヘッダーを書き込む
+    /// </summary>
+    private void InitializeCsvWriter()
+    {
+        _continuousCsvWriter = GetComponent<CSVWriter_NAKAMURA>();
+        if (_continuousCsvWriter == null)
+        {
+            _continuousCsvWriter = gameObject.AddComponent<CSVWriter_NAKAMURA>();
+        }
+
+        string header = "Timestamp," +
+                        "Controller_R_PosX,Controller_R_PosY,Controller_R_PosZ,Controller_R_RotX,Controller_R_RotY,Controller_R_RotZ,Controller_R_RotW," +
+                        "Avatar_R_PosX,Avatar_R_PosY,Avatar_R_PosZ,Avatar_R_RotX,Avatar_R_RotY,Avatar_R_RotZ,Avatar_R_RotW," +
+                        "Controller_L_PosX,Controller_L_PosY,Controller_L_PosZ,Controller_L_RotX,Controller_L_RotY,Controller_L_RotZ,Controller_L_RotW," +
+                        "Avatar_L_PosX,Avatar_L_PosY,Avatar_L_PosZ,Avatar_L_RotX,Avatar_L_RotY,Avatar_L_RotZ,Avatar_L_RotW," +
+                        "Controller_Head_PosX,Controller_Head_PosY,Controller_Head_PosZ,Controller_Head_RotX,Controller_Head_RotY,Controller_Head_RotZ,Controller_Head_RotW," +
+                        "Avatar_Head_PosX,Avatar_Head_PosY,Avatar_Head_PosZ,Avatar_Head_RotX,Avatar_Head_RotY,Avatar_Head_RotZ,Avatar_Head_RotW," +
+                        "Target_PosX,Target_PosY,Target_PosZ,IsTouch," +
+                        "Onset," +
+                        "DeltaTime,FPS,ElapsedTime";
+        _continuousCsvWriter.WriteCSV(header, continuousFilePath, continuousFileName);
+    }
+
+    /// <summary>
+    /// 1フレーム分のデータを記録する
+    /// </summary>
+    private void RecordFrameData()
+    {
+        if (_continuousCsvWriter == null) return;
+
+        string dataLine = FormatDataLine(Time.deltaTime);
+        _continuousCsvWriter.WriteCSV(dataLine, continuousFilePath, continuousFileName);
+    }
+
+    private string FormatDataLine(float deltaTime)
+    {
+        _elapsedTime += deltaTime;
+        float fps = (deltaTime > 0) ? 1f / deltaTime : 0;
+
+        Vector3 controllerRPos = recordTarget_Right_Controller.position;
+        Quaternion controllerRRot = recordTarget_Right_Controller.rotation;
+        Vector3 avatarRPos = recordTarget_Right_AvatarBone.position;
+        Quaternion avatarRRot = recordTarget_Right_AvatarBone.rotation;
+
+        Vector3 controllerLPos = recordTarget_Left_Controller.position;
+        Quaternion controllerLRot = recordTarget_Left_Controller.rotation;
+        Vector3 avatarLPos = recordTarget_Left_AvatarBone.position;
+        Quaternion avatarLRot = recordTarget_Left_AvatarBone.rotation;
+
+        Vector3 controllerHeadPos = recordTarget_Head_Controller.position;
+        Quaternion controllerHeadRot = recordTarget_Head_Controller.rotation;
+        Vector3 avatarHeadPos = recordTarget_Head_AvatarBone.position;
+        Quaternion avatarHeadRot = recordTarget_Head_AvatarBone.rotation;
+
+        int currentIsTouch = isTouch;
+        if (isTouch == 1) isTouch = 0;
+
+        int currentOnset = onset;
+        if (onset == 1) onset = 0;
+
+        return $"{_elapsedTime}," +
+               $"{controllerRPos.x},{controllerRPos.y},{controllerRPos.z},{controllerRRot.x},{controllerRRot.y},{controllerRRot.z},{controllerRRot.w}," +
+               $"{avatarRPos.x},{avatarRPos.y},{avatarRPos.z},{avatarRRot.x},{avatarRRot.y},{avatarRRot.z},{avatarRRot.w}," +
+               $"{controllerLPos.x},{controllerLPos.y},{controllerLPos.z},{controllerLRot.x},{controllerLRot.y},{controllerLRot.z},{controllerLRot.w}," +
+               $"{avatarLPos.x},{avatarLPos.y},{avatarLPos.z},{avatarLRot.x},{avatarLRot.y},{avatarLRot.z},{avatarLRot.w}," +
+               $"{controllerHeadPos.x},{controllerHeadPos.y},{controllerHeadPos.z},{controllerHeadRot.x},{controllerHeadRot.y},{controllerHeadRot.z},{controllerHeadRot.w}," +
+               $"{avatarHeadPos.x},{avatarHeadPos.y},{avatarHeadPos.z},{avatarHeadRot.x},{avatarHeadRot.y},{avatarHeadRot.z},{avatarHeadRot.w}," +
+               $"{tgtPosX},{tgtPosY},{tgtPosZ},{currentIsTouch}," +
+               $"{currentOnset}," +
+               $"{deltaTime},{fps},{_elapsedTime}";
+    }
+
+    // --- 外部から状態を設定するためのメソッド（関数名は維持） ---
+    public void RecordTgt(float num1, float num2, float num3) { tgtPosX = num1; tgtPosY = num2; tgtPosZ = num3; }
+    public void isTouched() { isTouch = 1; }
+    public void OnsetOccurred() { onset = 1; }
+
+    // =====================================================================================
+    // == 以下のメソッドは不要になりましたが、エラー防止のために空の状態で残します ==
+    // =====================================================================================
+    public void FirstRecord() { /* ヘッダー書き込みはStartRecording時に行うため不要 */ }
+    public void RecordSpace() { /* 連続記録のため不要 */ }
+    public void Record(float fnum) { /* Updateで自動記録されるため不要 */ }
+}
