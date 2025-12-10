@@ -1,0 +1,577 @@
+using UnityEngine;
+
+using System.Collections.Generic;
+
+using System.IO;
+
+
+
+public class umakuike : MonoBehaviour
+
+{
+
+    [Header("再生するモーションデータ")]
+
+    [Tooltip("新しい形式で出力したCSVファイルを指定")]
+
+    public TextAsset motionCsvFile;
+
+
+
+    [Header("動きを適用するターゲット")]
+
+    [Tooltip("【重要】CSVのアバター右手首の動きを適用するIKターゲット")]
+
+    public Transform avatarRightHandTarget;
+
+    [Tooltip("【重要】CSVのアバター左手首の動きを適用するIKターゲット")]
+
+    public Transform avatarLeftHandTarget;
+
+    [Tooltip("【重要】CSVのアバターの頭の動きを適用するIKターゲット")]
+
+    public Transform avatarHeadTarget;
+
+
+
+    [Tooltip("【任意】CSVの右手コントローラーの動きを適用するオブジェクト")]
+
+    public Transform controllerRightHandTarget;
+
+    [Tooltip("【任意】CSVの左手コントローラーの動きを適用するオブジェクト")]
+
+    public Transform controllerLeftHandTarget;
+
+    [Tooltip("【任意】CSVの頭（HMD）の動きを適用するオブジェクト")]
+
+    public Transform controllerHeadTarget;
+
+
+
+    // ★★★ 変更点: Prefabを設定し、生成したインスタンスを管理するように変更 ★★★
+
+    [Header("イベント制御オブジェクト")]
+
+    [Tooltip("Onset=1でPrefabを生成し、IsTouch=1で破棄します。")]
+
+    public GameObject targetPrefab;
+
+
+
+    private GameObject currentTargetInstance = null; // 現在生成されているオブジェクトのインスタンス
+
+    // ★★★ ここまで ★★★
+
+
+
+    [Header("再生コントロール")]
+
+    public bool startPlayback = false;
+
+    public bool loopPlayback = false;
+
+
+
+    [Header("変換設定")]
+
+    [Tooltip("有効にすると、対面にいるアバター用に位置や回転を反転させます")]
+
+    public bool applyMirroring = true;
+
+    public Vector3 selfAvatarOrigin = new Vector3(0, 0, -0.3f);
+
+    public Vector3 partnerAvatarOrigin = new Vector3(0, 0, 1.75f);
+
+
+
+    private List<string[]> motionData;
+
+    private int currentFrame = 0;
+
+    private bool isPlaying = false;
+
+
+
+    // ★★★ 変更点: 新しい列インデックス (Target_PosX) を追加 ★★★
+
+    private const int COL_CONTROLLER_R_POS_X = 1;  // Controller_R_PosX
+
+    private const int COL_AVATAR_R_POS_X = 8;      // Avatar_R_PosX
+
+    private const int COL_CONTROLLER_L_POS_X = 15; // Controller_L_PosX
+
+    private const int COL_AVATAR_L_POS_X = 22;     // Avatar_L_PosX
+
+    private const int COL_CONTROLLER_HEAD_POS_X = 29;// Controller_Head_PosX
+
+    private const int COL_AVATAR_HEAD_POS_X = 36;  // Avatar_Head_PosX
+
+
+
+    private const int COL_TARGET_POS_X = 43; // Target_PosX (43列目, 0始まり)
+
+    private const int COL_IS_TOUCH = 46; // IsTouch (46列目, 0始まり)
+
+    private const int COL_ONSET = 47;    // Onset (47列目, 0始まり)
+
+    // ★★★ ここまで ★★★
+
+
+
+    void Start()
+
+    {
+
+        LoadMotionData();
+
+        // ★★★ 変更点: 初期化時に既存インスタンスを破棄 ★★★
+
+        if (currentTargetInstance != null)
+
+        {
+
+            Destroy(currentTargetInstance);
+
+            currentTargetInstance = null;
+
+        }
+
+        // ★★★ ここまで ★★★
+
+    }
+
+
+
+    // ★★★ 新規追加: Enterキーでの再生開始機能 ★★★
+
+    void Update()
+
+    {
+
+        // Enterキー (メインキーボードのリターンキー) が押されたかを検出
+
+        if (Input.GetKeyDown(KeyCode.Return))
+
+        {
+
+            // 再生が開始されていない場合のみ、フラグを立てる
+
+            if (!isPlaying)
+
+            {
+
+                startPlayback = true;
+
+                Debug.Log("Enter key pressed: Playback requested.");
+
+            }
+
+        }
+
+    }
+
+    // ★★★ ここまで ★★★
+
+
+
+    void LateUpdate()
+
+    {
+
+        if (startPlayback && !isPlaying) Play();
+
+        if (!startPlayback && isPlaying) Stop();
+
+        if (isPlaying) UpdateMotion();
+
+    }
+
+
+
+    public void Play()
+
+    {
+
+        if (motionData == null || motionData.Count == 0)
+
+        {
+
+            Debug.LogWarning("Motion data not loaded.");
+
+            startPlayback = false;
+
+            return;
+
+        }
+
+        isPlaying = true;
+
+        currentFrame = 0;
+
+
+
+        // ★★★ 変更点: Play開始時に念のため既存インスタンスを破棄 ★★★
+
+        if (currentTargetInstance != null)
+
+        {
+
+            Destroy(currentTargetInstance);
+
+            currentTargetInstance = null;
+
+        }
+
+        // ★★★ ここまで ★★★
+
+
+
+        Debug.Log("Playback started...");
+
+    }
+
+
+
+    public void Stop()
+
+    {
+
+        isPlaying = false;
+
+        Debug.Log("Playback stopped.");
+
+    }
+
+
+
+    private void UpdateMotion()
+
+    {
+
+        ApplyMotionForCurrentFrame();
+
+        currentFrame++;
+
+        if (currentFrame >= motionData.Count)
+
+        {
+
+            if (loopPlayback) currentFrame = 0;
+
+            else
+
+            {
+
+                isPlaying = false;
+
+                startPlayback = false;
+
+                Debug.Log("Playback finished.");
+
+
+
+                // ★★★ 変更点: 再生終了時にインスタンスを破棄 ★★★
+
+                if (currentTargetInstance != null)
+
+                {
+
+                    Destroy(currentTargetInstance);
+
+                    currentTargetInstance = null;
+
+                }
+
+                // ★★★ ここまで ★★★
+
+            }
+
+        }
+
+    }
+
+
+
+    private void LoadMotionData()
+
+    {
+
+        if (motionCsvFile == null)
+
+        {
+
+            Debug.LogError("Motion CSV Fileが指定されていません！");
+
+            return;
+
+        }
+
+        motionData = new List<string[]>();
+
+        using (StringReader reader = new StringReader(motionCsvFile.text))
+
+        {
+
+            reader.ReadLine(); // ヘッダーを読み飛ばす
+
+            string line;
+
+            while ((line = reader.ReadLine()) != null)
+
+            {
+
+                if (string.IsNullOrWhiteSpace(line)) continue;
+
+                motionData.Add(line.Split(','));
+
+            }
+
+        }
+
+        if (motionData.Count > 0) Debug.Log($"モーションデータをロードしました: {motionData.Count}フレーム");
+
+        else Debug.LogError("CSVから有効なデータを読み込めませんでした。");
+
+    }
+
+
+
+    private void ApplyMotionForCurrentFrame()
+
+    {
+
+        if (currentFrame >= motionData.Count) return;
+
+
+
+        string[] frameData = motionData[currentFrame];
+
+
+
+        try
+
+        {
+
+            // --- モーションデータ読み込み (既存のロジック) ---
+
+            Vector3 controllerRPos = ParseVector3(frameData, COL_CONTROLLER_R_POS_X);
+
+            Quaternion controllerRRot = ParseQuaternion(frameData, COL_CONTROLLER_R_POS_X + 3);
+
+            Vector3 avatarRPos = ParseVector3(frameData, COL_AVATAR_R_POS_X);
+
+            Quaternion avatarRRot = ParseQuaternion(frameData, COL_AVATAR_R_POS_X + 3);
+
+            Vector3 controllerLPos = ParseVector3(frameData, COL_CONTROLLER_L_POS_X);
+
+            Quaternion controllerLRot = ParseQuaternion(frameData, COL_CONTROLLER_L_POS_X + 3);
+
+            Vector3 avatarLPos = ParseVector3(frameData, COL_AVATAR_L_POS_X);
+
+            Quaternion avatarLRot = ParseQuaternion(frameData, COL_AVATAR_L_POS_X + 3);
+
+            Vector3 controllerHeadPos = ParseVector3(frameData, COL_CONTROLLER_HEAD_POS_X);
+
+            Quaternion controllerHeadRot = ParseQuaternion(frameData, COL_CONTROLLER_HEAD_POS_X + 3);
+
+            Vector3 avatarHeadPos = ParseVector3(frameData, COL_AVATAR_HEAD_POS_X);
+
+            Quaternion avatarHeadRot = ParseQuaternion(frameData, COL_AVATAR_HEAD_POS_X + 3);
+
+
+
+            // --- ターゲット座標の読み込み
+
+            Vector3 originalTargetPos = ParseVector3(frameData, COL_TARGET_POS_X);
+
+            Quaternion originalTargetRot = Quaternion.identity;
+
+
+
+
+
+            // ミラーリングを適用 (既存のロジック)
+
+            if (applyMirroring)
+
+            {
+
+                (controllerRPos, controllerRRot) = TransformMotion(controllerRPos, controllerRRot);
+
+                (avatarRPos, avatarRRot) = TransformMotion(avatarRPos, avatarRRot);
+
+                (controllerLPos, controllerLRot) = TransformMotion(controllerLPos, controllerLRot);
+
+                (avatarLPos, avatarLRot) = TransformMotion(avatarLPos, avatarLRot);
+
+                (controllerHeadPos, controllerHeadRot) = TransformMotion(controllerHeadPos, controllerHeadRot);
+
+                (avatarHeadPos, avatarHeadRot) = TransformMotion(avatarHeadPos, avatarHeadRot);
+
+
+
+                // ★★★ ターゲット座標にミラーリングを適用 ★★★
+
+                (originalTargetPos, originalTargetRot) = TransformMotion(originalTargetPos, originalTargetRot);
+
+                // ★★★ ここまで ★★★
+
+            }
+
+
+
+            // --- ターゲットにモーションを適用 (既存のロジック) ---
+
+            if (avatarRightHandTarget != null) { avatarRightHandTarget.position = avatarRPos; avatarRightHandTarget.rotation = avatarRRot; }
+
+            if (controllerRightHandTarget != null) { controllerRightHandTarget.position = controllerRPos; controllerRightHandTarget.rotation = controllerRRot; }
+
+            if (avatarLeftHandTarget != null) { avatarLeftHandTarget.position = avatarLPos; avatarLeftHandTarget.rotation = avatarLRot; }
+
+            if (controllerLeftHandTarget != null) { controllerLeftHandTarget.position = controllerLPos; controllerLeftHandTarget.rotation = controllerLRot; }
+
+            if (avatarHeadTarget != null) { avatarHeadTarget.position = avatarHeadPos; avatarHeadTarget.rotation = avatarHeadRot; }
+
+            if (controllerHeadTarget != null) { controllerHeadTarget.position = controllerHeadPos; controllerHeadTarget.rotation = controllerHeadRot; }
+
+
+
+
+
+            // ★★★ Onset/IsTouchによるPrefabの生成・破棄制御 ★★★
+
+            if (targetPrefab != null)
+
+            {
+
+                float onsetValue = 0f;
+
+                float isTouchValue = 0f;
+
+
+
+                if (COL_ONSET < frameData.Length)
+
+                {
+
+                    float.TryParse(frameData[COL_ONSET], out onsetValue);
+
+                }
+
+
+
+                if (COL_IS_TOUCH < frameData.Length)
+
+                {
+
+                    float.TryParse(frameData[COL_IS_TOUCH], out isTouchValue);
+
+                }
+
+
+
+                // Onset=1でオブジェクトを生成（Instantiate）
+
+                if (onsetValue > 0.5f)
+
+                {
+
+                    if (currentTargetInstance == null)
+
+                    {
+
+                        currentTargetInstance = Instantiate(targetPrefab, originalTargetPos, originalTargetRot);
+
+                        Debug.Log($"Frame {currentFrame}: OBJECT INSTANTIATED at {originalTargetPos}");
+
+                    }
+
+                }
+
+
+
+                // IsTouch=1でオブジェクトを破棄（Destroy）
+
+                if (isTouchValue > 0.5f)
+
+                {
+
+                    if (currentTargetInstance != null)
+
+                    {
+
+                        Destroy(currentTargetInstance);
+
+                        currentTargetInstance = null; // 破棄後に参照をクリア
+
+                        Debug.Log($"Frame {currentFrame}: OBJECT DESTROYED");
+
+                    }
+
+                }
+
+            }
+
+            // ★★★ ここまで ★★★
+
+
+
+        }
+
+        catch (System.Exception e)
+
+        {
+
+            Debug.LogError($"CSVデータのパースに失敗しました。Frame: {currentFrame}, Error: {e.Message}. Data: {string.Join(",", frameData)}");
+
+            Stop();
+
+            startPlayback = false;
+
+        }
+
+    }
+
+
+
+    // --- ヘルパーメソッド（既存のロジック） ---
+
+    private Vector3 ParseVector3(string[] data, int startIndex)
+
+    {
+
+        return new Vector3(float.Parse(data[startIndex]), float.Parse(data[startIndex + 1]), float.Parse(data[startIndex + 2]));
+
+    }
+
+
+
+    private Quaternion ParseQuaternion(string[] data, int startIndex)
+
+    {
+
+        return new Quaternion(float.Parse(data[startIndex]), float.Parse(data[startIndex + 1]), float.Parse(data[startIndex + 2]), float.Parse(data[startIndex + 3]));
+
+    }
+
+
+
+    private (Vector3, Quaternion) TransformMotion(Vector3 pos, Quaternion rot)
+
+    {
+
+        Vector3 relativePos = pos - selfAvatarOrigin;
+
+        Vector3 mirroredRelativePos = new Vector3(-relativePos.x, relativePos.y, -relativePos.z);
+
+        Vector3 transformedPos = partnerAvatarOrigin + mirroredRelativePos;
+
+        Quaternion mirrorRotation = Quaternion.Euler(0, 180, 0);
+
+        Quaternion transformedRot = mirrorRotation * rot;
+
+        return (transformedPos, transformedRot);
+
+    }
+
+}
