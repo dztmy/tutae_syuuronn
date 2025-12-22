@@ -298,3 +298,4 @@ public class NetWorkTargetPos : NetworkBehaviour
         _playCommands = playCommands;
     }
 }
+
