@@ -1,0 +1,115 @@
+
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using Mirror;
+
+public class PlayCommands_NAKAMURA : NetworkBehaviour
+{
+    // Start is called before the first frame update
+
+    private NetWorkTargetPos _netWorkTargetPos_Host;
+    private NetWorkTargetPos _netWorkTargetPos_Client;
+
+    [SerializeField]
+    private AudioSource audioSource;
+
+    [SerializeField]
+    private AudioClip start;
+
+    void Start()
+    {
+        StartCoroutine(DelayFunction(0.5f, () =>
+        {
+
+            _netWorkTargetPos_Host = GameObject.Find("TargetRandomManager_Host").GetComponent<NetWorkTargetPos>();
+            _netWorkTargetPos_Client = GameObject.Find("TargetRandomManager_Client").GetComponent<NetWorkTargetPos>();
+
+
+            if (hasAuthority)
+            {
+                _netWorkTargetPos_Host.SetPlayerCommands(this);
+                _netWorkTargetPos_Client.SetPlayerCommands(this);
+            }
+        }));
+    }
+    private IEnumerator DelayFunction(float waitTime, System.Action action)
+    {
+        yield return new WaitForSeconds(waitTime);
+        action();
+    }
+
+    [Command]
+    public void CmdHostChangeRandList(int[] val)
+    {
+        RpcHostChangeRandList(val);
+    }
+
+    [Command]
+    public void CmdClientChangeRandList(int[] val)
+    {
+        RpcClientChangeRandList(val);
+    }
+
+    [ClientRpc]
+    public void RpcHostChangeRandList(int[] val)
+    {
+        _netWorkTargetPos_Host.ChangeRandList(val);
+    }
+
+    [ClientRpc]
+    public void RpcClientChangeRandList(int[] val)
+    {
+        _netWorkTargetPos_Client.ChangeRandList(val);
+    }
+
+    [Command]
+    public void CmdHostChangeIsStartTask(bool isStarting)
+    {
+        RpcHostChangeIsStartTask(isStarting);
+    }
+
+    [Command]
+    public void CmdClientChangeIsStartTask(bool isStarting)
+    {
+        RpcClientChangeIsStartTask(isStarting);
+    }
+
+    [ClientRpc]
+    public void RpcHostChangeIsStartTask(bool isStarting)
+    {
+        audioSource.PlayOneShot(start);
+        _netWorkTargetPos_Host.ChangeIsStartTask(isStarting);
+    }
+
+    [ClientRpc]
+    public void RpcClientChangeIsStartTask(bool isStarting)
+    {
+        audioSource.PlayOneShot(start);
+        _netWorkTargetPos_Client.ChangeIsStartTask(isStarting);
+    }
+
+    [Command]
+    public void CmdHostChangeMoveScene(bool isMove)
+    {
+        _netWorkTargetPos_Host.ChangeMoveScene(isMove);
+    }
+
+    [Command]
+    public void CmdClientChangeMoveScene(bool isMove)
+    {
+        _netWorkTargetPos_Client.ChangeMoveScene(isMove);
+    }
+
+    [Command]
+    public void CmdHostTouchedTarget(bool isTouched)
+    {
+        _netWorkTargetPos_Host.TouchedTarget(isTouched);
+    }
+
+    [Command]
+    public void CmdClientTouchedTarget(bool isTouched)
+    {
+        _netWorkTargetPos_Client.TouchedTarget(isTouched);
+    }
+}
